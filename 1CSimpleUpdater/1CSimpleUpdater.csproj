@@ -42,7 +42,10 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Base1C.cs" />
     <Compile Include="Common.cs" />
+    <Compile Include="ConfUpdate1C.cs" />
+    <Compile Include="Platform1C.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Settings.cs" />

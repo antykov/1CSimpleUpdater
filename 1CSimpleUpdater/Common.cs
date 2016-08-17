@@ -1,5 +1,7 @@
-﻿using System;
+﻿using Microsoft.Win32;
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -8,8 +10,6 @@ namespace _1CSimpleUpdater
 {
     static class Common
     {
-
-
         public static long GetVersionAsLong(string version, char separator = '.')
         {
             string[] split = version.Split(separator);
@@ -20,7 +20,20 @@ namespace _1CSimpleUpdater
 
             return lVersion;
         }
-        
+
+        public static string RemovePathInvalidChars(string path, string replaceString = "")
+        {
+            string result = path;
+
+            char[] invalidChars = Path.GetInvalidPathChars();
+            foreach (var c in invalidChars)
+            {
+                result = result.Replace(c.ToString(), replaceString);
+            }
+
+            return result;
+        }
+
         public static void LogException(Exception E, string info = "")
         {
             Console.ForegroundColor = ConsoleColor.Red;

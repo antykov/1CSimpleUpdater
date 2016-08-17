@@ -12,12 +12,16 @@ namespace _1CSimpleUpdater
     public class Base1CSettings
     {
         public string Description;
-        public string ConnectionString;
+        public string IBConnectionString;
         public string PlatformVersion;
         public string Login;
         public string Password;
+        public int BackupsCount;
 
-
+        [XmlIgnore]
+        public bool IsServerIB;
+        [XmlIgnore]
+        public string FileIBPath;
     }
 
     public class Settings
@@ -26,7 +30,7 @@ namespace _1CSimpleUpdater
         public string BackupsDirectory;
         [XmlElement]
         public string TemplatesDirectory;
-        [XmlArray("Bases1C"), XmlArrayItem("Base1CSettings")]
+        [XmlArray("Bases1C"), XmlArrayItem("Base1C")]
         public List<Base1CSettings> Bases1C;
 
         public Settings()
@@ -52,6 +56,23 @@ namespace _1CSimpleUpdater
             using (FileStream xmlStream = new FileStream(settingsFilePath, FileMode.Open))
             {
                 settings = (Settings)xmlSerializer.Deserialize(xmlStream);
+            }
+
+            foreach (var base1C in settings.Bases1C)
+            {
+                base1C.IsServerIB = (base1C.IBConnectionString.ToUpper().IndexOf("FILE") == -1) ? true : false;
+                if (base1C.IsServerIB)
+                    base1C.FileIBPath = "";
+                else
+                {
+                    var ibPathArray = base1C.IBConnectionString.Split(';').Select(s => s.Split('=')).Where(w => w.Length == 2 && w[0].ToUpper() == "FILE").ToArray();
+                    if (ibPathArray.Length == 0)
+                        throw new Exception($"Ошибка получения каталога из строки подключения файловой ИБ: {base1C.IBConnectionString}");
+
+                    base1C.FileIBPath = ibPathArray[0][1].Replace("\"", "");
+                    if (!Directory.Exists(base1C.FileIBPath))
+                        throw new Exception($"Не существует каталог файловой ИБ: {base1C.FileIBPath} ({base1C.Description})");
+                }
             }
         }
 
@@ -85,10 +106,11 @@ namespace _1CSimpleUpdater
             templateSettings.Bases1C.Add(new Base1CSettings
             {
                 Description = "Название (Типовая бухгалтерия)",
-                ConnectionString = @"Строка подключения (File=""D:\WORK\_Типовые_\_Типовая_БП2_"";, Srvr=""localhost"";Ref=""Accounting"";)",
+                IBConnectionString = @"Строка подключения (File=""D:\WORK\_Типовые_\_Типовая_БП2_"";, Srvr=""localhost"";Ref=""Accounting"";)",
                 PlatformVersion = "Версия платформы (пусто = последняя, 8.2 = последняя из 8.2, 8.2.19.63 = конкретный релиз)",
                 Login = "Логин",
-                Password = "Пароль"
+                Password = "Пароль",
+                BackupsCount = 2
             });
 
             using (XmlWriter xmlWriter = XmlWriter.Create(settingsFilePath, xmlWriterSettings))
