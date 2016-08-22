@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -8,66 +9,41 @@ using System.Threading.Tasks;
 
 namespace _1CSimpleUpdater
 {
-    class Base1CInfo
+    [Serializable]
+    public class Base1CInfo
     {
         public string ConfName;
         public string ConfVersion;
         public int SessionsCount;
+        public SortedList<long, ConfUpdateInfo> UpdatesSequence;
+        public string BackupFilePath;
+        public InstalledPlatformInfo PlatformInfo;
     }
 
-    static class Base1C
+    public static class Base1C
     {
-        static dynamic Get1CConnection(Base1CSettings baseSettings)
+        public static Base1CInfo GetBase1CInfo(Base1CSettings baseSettings)
         {
-            InstalledPlatformInfo platformInfo = Platform1C.GetAppropriatePlatformInfo(baseSettings.PlatformVersion);
-            if (platformInfo == null)
-                throw new Exception($"Не удалось найти подходящую версию платформы для конфигурации {baseSettings.Description}, требуемая версия = {baseSettings.PlatformVersion}!");
-            if (platformInfo.ComConnector == null)
-                throw new Exception($"Для платформы {platformInfo.PlatformVersion} не найден ComConnector!");
-            Platform1C.CheckComConnectorInprocServerVersion(platformInfo, baseSettings);
-
-            dynamic connectorInstance = Activator.CreateInstance(platformInfo.ComConnector);
-            string connectionString = baseSettings.IBConnectionString;
-            if (baseSettings.Login.Length > 0)
-            {
-                connectionString += $"Usr=\"{baseSettings.Login}\";";
-                if (baseSettings.Password.Length > 0)
-                    connectionString += $"Pwd=\"{baseSettings.Password}\";";
-            }
-
             try
             {
-                dynamic connection = connectorInstance.Connect(connectionString);
-                return connection;
-            }
-            catch (Exception e)
-            {
-                Common.LogException(e);
-                return null;
-            }
-        }
+                InstalledPlatformInfo platformInfo = Platform1C.GetAppropriatePlatformInfo(baseSettings.PlatformVersion);
+                if (platformInfo == null)
+                    throw new Exception($"Не удалось найти подходящую версию платформы для конфигурации {baseSettings.Description}, требуемая версия = {baseSettings.PlatformVersion}!");
+                if (platformInfo.ComConnector == null)
+                    throw new Exception($"Для платформы {platformInfo.PlatformVersion} не найден ComConnector!");
+                Platform1C.CheckComConnectorInprocServerVersion(platformInfo, baseSettings);
 
-        public static Base1CInfo GetBase1CInfo(Base1CSettings base1CSettings)
-        {
-            var connection = Get1CConnection(base1CSettings);
-            if (connection == null)
-                return null;
+                AppDomain domainComConnection = AppDomain.CreateDomain("COM connection to 1C");
+                dynamic proxyOfComConneciontDomainObject = domainComConnection.CreateInstanceAndUnwrap("ComConnection1C", "ComConnection1C.ComConnection1C");
+                Base1CInfo baseInfo = proxyOfComConneciontDomainObject.GetBase1CInfo(baseSettings, platformInfo.ComConnectorVersion);
+                AppDomain.Unload(domainComConnection);
 
-            try
-            {
-                Base1CInfo info = new Base1CInfo();
-                info.ConfName = connection.Метаданные.Имя;
-                info.ConfVersion = connection.Метаданные.Версия;
-                info.SessionsCount = connection.ПолучитьСоединенияИнформационнойБазы().Количество() - 1;
+                baseInfo.PlatformInfo = platformInfo;
 
-                return info;
+                return baseInfo;
             } catch (Exception e)
             {
                 Common.LogException(e);
-            }
-            finally
-            {
-                Marshal.FinalReleaseComObject(connection);
             }
             
             return null;
@@ -75,14 +51,32 @@ namespace _1CSimpleUpdater
 
         public static bool CheckBaseUpdateNecessity(Base1CInfo baseInfo)
         {
+            try
+            {
+                baseInfo.UpdatesSequence = ConfUpdate1C.GetUpdatesSequence(baseInfo);
+                if (baseInfo.UpdatesSequence == null || baseInfo.UpdatesSequence.Count == 0)
+                    throw new Exception("Не удалось найти подходящие обновления!");
+                if (baseInfo.UpdatesSequence.Count == 1 && baseInfo.UpdatesSequence.ElementAt(0).Value.Version == baseInfo.ConfVersion)
+                {
+                    Common.Log("Версия конфигурации является актуальной!", ConsoleColor.Green);
+                    return false;
+                }
 
+                return true;
+            }
+            catch (Exception e)
+            {
+                Common.LogException(e);
+                return false;
+            }
         }
 
         public static bool PrepareBaseForUpdate(Base1CSettings baseSettings, Base1CInfo baseInfo)
         {
             if (baseSettings.IsServerIB)
             {
-                throw new NotImplementedException();
+                //throw new NotImplementedException();
+                return true;
             }
 
             if (baseInfo.SessionsCount > 0)
@@ -100,7 +94,7 @@ namespace _1CSimpleUpdater
                         DateTime.Now.ToString("yyyyMMddHHmmss"),
                         DateTime.Now.AddHours(6).ToString("yyyyMMddHHmmss"),
                         "\"Установлена блокировка соединений для обновления конфигурации!\"",
-                        "\"1CSimpleUpdater\"",
+                        $"\"{Platform1C.SessionLockCode}\"",
                         "\"\"}"
                     };
 
@@ -127,7 +121,7 @@ namespace _1CSimpleUpdater
             {
                 if (baseSettings.IsServerIB)
                 {
-                    throw new NotImplementedException();
+                    //throw new NotImplementedException();
                 }
                 else
                 {
@@ -140,15 +134,82 @@ namespace _1CSimpleUpdater
             }
         }
 
-        public static void MakeBaseBackup(Base1CSettings baseSettings)
+        public static void MakeBaseBackup(Base1CSettings baseSettings, Base1CInfo baseInfo)
         {
+            if (baseSettings.BackupsCount == 0)
+                return;
 
+            Common.Log("Создание резервной копии...");
+
+            string descr = "{" + $"{Common.RemovePathInvalidChars(baseSettings.Description, "_").Replace(' ', '_')}" + "}";
+            List<string> files = Directory.GetFiles(AppSettings.settings.BackupsDirectory, $"???????????????????_{descr}.dt").OrderBy(o => File.GetCreationTime(o)).ToList<string>();
+            while (files.Count >= baseSettings.BackupsCount)
+            {
+                File.Delete(files[0]);
+                files.RemoveAt(0);
+            }
+
+            baseInfo.BackupFilePath = Path.Combine(AppSettings.settings.BackupsDirectory, $"{DateTime.Now.ToString("yyyy-MM-dd-HH-mm-ss")}_{descr}.dt");
+            Common.StartProcessWithArguments(baseInfo.PlatformInfo.ApplicationPath, Platform1C.GetArgumentForBaseBackup(baseSettings, baseInfo.BackupFilePath));
+
+            if (!File.Exists(baseInfo.BackupFilePath))
+                throw new Exception($"Возможно произошла ошибка при создании резервной копии. Файл {baseInfo.BackupFilePath} не обнаружен!");
+        }
+
+        public static bool CheckOutFileAfterConfUpdateOrRaiseException()
+        {
+            if (!File.Exists(Platform1C.PlatformOutFilePath))
+                throw new Exception("Возможно произошла ошибка при обновлении, т.к. отсутствует файл с результатами работы конфигуратора 1С!");
+
+            string outText = File.ReadAllText(Platform1C.PlatformOutFilePath, Encoding.GetEncoding("windows-1251"));
+            if (String.IsNullOrWhiteSpace(outText))
+                throw new Exception("Возможно произошла ошибка при обновлении, т.к. файл с результатами работы конфигуратора 1С пуст!");
+
+            string[] splitOutText = outText.Split('\n');
+            if (splitOutText.Where(w => w.IndexOf("Файл не содержит доступных обновлений") != -1).Count() > 0)
+            {
+                Common.Log("Произошла ошибка: файл не содержит доступных обновлений!\nБудет произведена попытка обновления на следующий релиз, т.к. возможно просто не обновлена конфигурация БД!", ConsoleColor.Red);
+                return false;
+            }
+            if (splitOutText.Where(w => w.IndexOf("Обновление конфигурации успешно завершено") != -1).Count() != 2)
+            {
+                Common.Log("\n");
+                foreach (var str in splitOutText)
+                    Common.Log(str, ConsoleColor.Red);
+                throw new Exception($"\nВозможно произошла ошибка при обновлении!");
+            }
+
+            return true;
+        }
+
+        public static bool UpdateBaseToNextRelease(Base1CSettings baseSettings, Base1CInfo baseInfo, ConfUpdateInfo updateInfo)
+        {
+            Common.Log($"Обновление на релиз {updateInfo.Version}...");
+
+            int exitCode = Common.StartProcessWithArguments(baseInfo.PlatformInfo.ApplicationPath, Platform1C.GetArgumentForBaseConfUpdate(baseSettings, updateInfo.UpdateFilePath));
+            if (exitCode < 0)
+                throw new Exception($"Возможно произошла ошибка при обновлении, т.к. код результата выполнения = {exitCode}");
+
+            return CheckOutFileAfterConfUpdateOrRaiseException();
+        }
+
+        public static void UpdateBaseInUserMode(Base1CSettings baseSettings, Base1CInfo baseInfo)
+        {
+            Common.Log("Попытка обновления ИБ в пользовательском режиме...");
+
+            AppDomain domainComConnection = AppDomain.CreateDomain("COM connection to 1C");
+            dynamic proxyOfComConneciontDomainObject = domainComConnection.CreateInstanceAndUnwrap("ComConnection1C", "ComConnection1C.ComConnection1C");
+            Exception result = proxyOfComConneciontDomainObject.UpdateBaseInUserMode(baseSettings, baseInfo.PlatformInfo.ComConnectorVersion);
+            AppDomain.Unload(domainComConnection);
+
+            if (result != null)
+                throw result;
         }
 
         public static void UpdateBase(Base1CSettings baseSettings)
         {
             Common.Log($"\n////////////////////////////////////////////////////////////////////////////////", ConsoleColor.Yellow);
-            Common.Log($"// ОБНОВЛЕНИЕ БАЗЫ: {baseSettings.Description}\n", ConsoleColor.Yellow);
+            Common.Log($"// ОБНОВЛЕНИЕ БАЗЫ: {baseSettings.Description}", ConsoleColor.Yellow);
 
             Base1CInfo baseInfo = Base1C.GetBase1CInfo(baseSettings);
             if (baseInfo == null)
@@ -164,8 +225,16 @@ namespace _1CSimpleUpdater
                 if (!PrepareBaseForUpdate(baseSettings, baseInfo))
                     return;
 
-                if (baseSettings.BackupsCount > 0)
-                    MakeBaseBackup(baseSettings);
+                MakeBaseBackup(baseSettings, baseInfo);
+
+                bool lastUpdateResult = false;
+                foreach (var confUpdateInfo in baseInfo.UpdatesSequence)
+                    lastUpdateResult = UpdateBaseToNextRelease(baseSettings, baseInfo, confUpdateInfo.Value);
+
+                if (lastUpdateResult)
+                    UpdateBaseInUserMode(baseSettings, baseInfo);
+
+                Common.Log("Обновление успешно завершено!", ConsoleColor.Green);
             }
             catch (Exception e)
             {

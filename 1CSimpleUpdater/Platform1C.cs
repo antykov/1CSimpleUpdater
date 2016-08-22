@@ -1,6 +1,7 @@
 ﻿using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -8,10 +9,12 @@ using System.Threading.Tasks;
 
 namespace _1CSimpleUpdater
 {
+    [Serializable]
     public class InstalledPlatformInfo
     {
         public string Description;
         public string PlatformVersion;
+        public string InstallLocation;
         public string ApplicationPath;
         public string ComConnectorVersion;
         public string ComConnectorRegistryPath;
@@ -20,6 +23,8 @@ namespace _1CSimpleUpdater
 
     public static class Platform1C
     {
+        public static readonly string SessionLockCode = "1CSimpleUpdater";
+        public static readonly string PlatformOutFilePath = Path.Combine(Environment.CurrentDirectory, "1cv8_out.log");
         public static SortedList<long, InstalledPlatformInfo> InstalledPlatforms;
 
         static Platform1C()
@@ -42,7 +47,8 @@ namespace _1CSimpleUpdater
                 foreach (var item in query)
                 {
                     string installLocation = Path.Combine(item.GetValue("InstallLocation").ToString(), "bin");
-                    if (!File.Exists(Path.Combine(installLocation, "1cv8.exe")))
+                    string appPath = Path.Combine(installLocation, "1cv8.exe");
+                    if (!File.Exists(appPath))
                         continue;
 
                     string displayVersion = item.GetValue("DisplayVersion").ToString();
@@ -51,7 +57,8 @@ namespace _1CSimpleUpdater
                     {
                         Description = item.GetValue("DisplayName").ToString(),
                         PlatformVersion = displayVersion,
-                        ApplicationPath = installLocation,
+                        InstallLocation = installLocation,
+                        ApplicationPath = appPath,
                         ComConnectorVersion = Platform1C.GetComConnectorVersion(displayVersion),
                         ComConnectorRegistryPath = GetComConnectorInprocServerRegistryPath(Platform1C.GetComConnectorVersion(displayVersion)),
                         ComConnector = Type.GetTypeFromProgID(Platform1C.GetComConnectorVersion(displayVersion))
@@ -95,7 +102,7 @@ namespace _1CSimpleUpdater
 
         public static void CheckComConnectorInprocServerVersion(InstalledPlatformInfo platformInfo, Base1CSettings baseSettings)
         {
-            string comcntrPath = Path.Combine(platformInfo.ApplicationPath, "comcntr.dll");
+            string comcntrPath = Path.Combine(platformInfo.InstallLocation, "comcntr.dll");
             if (!File.Exists(comcntrPath) || String.IsNullOrWhiteSpace(platformInfo.ComConnectorRegistryPath))
                 return;
 
@@ -144,5 +151,38 @@ namespace _1CSimpleUpdater
             return null;
         }
 
+        public static string GetArgumentForBaseConnection(Base1CSettings baseSettings, string mode)
+        {
+            StringBuilder args = new StringBuilder();
+            args.Append($" {mode} /IBConnectionString \"{baseSettings.IBConnectionString.Replace("\"", "\"\"")}\"");
+            if (!String.IsNullOrWhiteSpace(baseSettings.Login))
+                args.Append($" /N \"{baseSettings.Login}\"");
+            if (!String.IsNullOrWhiteSpace(baseSettings.Password))
+                args.Append($" /P \"{baseSettings.Password}\"");
+            args.Append(" /DisableStartupMessages /DisableStartupDialogs");
+            args.Append($" /UC {Platform1C.SessionLockCode}");
+            args.Append($" /Out \"{Platform1C.PlatformOutFilePath}\"");
+
+            return args.ToString();
+        }
+
+        public static string GetArgumentForBaseBackup(Base1CSettings baseSettings, string backupFileName)
+        {
+            StringBuilder args = new StringBuilder();
+            args.Append(GetArgumentForBaseConnection(baseSettings, "DESIGNER"));
+            args.Append($" /DumpIB \"{backupFileName}\"");
+
+            return args.ToString();
+        }
+
+        public static string GetArgumentForBaseConfUpdate(Base1CSettings baseSettings, string cfuFileName)
+        {
+            StringBuilder args = new StringBuilder();
+            args.Append(GetArgumentForBaseConnection(baseSettings, "DESIGNER"));
+            args.Append($" /UpdateCfg \"{cfuFileName}\"");
+            args.Append($" /UpdateDBCfg -Dynamic-");
+
+            return args.ToString();
+        }
     }
 }

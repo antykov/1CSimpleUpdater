@@ -9,6 +9,7 @@ using System.Xml.Serialization;
 
 namespace _1CSimpleUpdater
 {
+    [Serializable]
     public class Base1CSettings
     {
         public string Description;
