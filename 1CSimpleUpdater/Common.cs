@@ -1,17 +1,36 @@
-﻿using Microsoft.Win32;
-using System;
-using System.Collections.Generic;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Management;
 using System.Text;
-using System.Threading.Tasks;
+using System.Threading;
 
 namespace _1CSimpleUpdater
 {
     static class Common
     {
+        public static dynamic CallFunctionAtComConnection1CDomain(string functionName, Base1CSettings baseSettings, string comConnectorVersion)
+        {
+            try
+            {
+                AppDomain domainComConnection = AppDomain.CreateDomain("COM connection to 1C");
+                dynamic proxyOfComConneciontDomainObject = domainComConnection.CreateInstanceAndUnwrap("ComConnection1C", "ComConnection1C.ComConnection1C");
+                dynamic result = proxyOfComConneciontDomainObject.GetType().InvokeMember(
+                    functionName,
+                    System.Reflection.BindingFlags.InvokeMethod,
+                    Type.DefaultBinder,
+                    proxyOfComConneciontDomainObject,
+                    new object[] { baseSettings, comConnectorVersion});
+                Thread.Sleep(1000);
+                AppDomain.Unload(domainComConnection);
+
+                return result;
+            } catch (Exception e)
+            {
+                LogException(e, $"Ошибка при вызове функции {functionName} в домене сборки ComConnection1C!");
+                return null;
+            }
+        }
 
         public static long GetVersionAsLong(string version, char separator = '.')
         {
@@ -29,7 +48,7 @@ namespace _1CSimpleUpdater
 
         public static bool CompareMajorMinorVersions(string version1, string version2)
         {
-            return String.Join("", version1.Split('.').Take(2).ToArray<string>()) == String.Join("", version2.Split('.').Take(2).ToArray<string>());
+            return string.Join("", version1.Split('.').Take(2).ToArray()) == string.Join("", version2.Split('.').Take(2).ToArray());
         }
 
         public static string RemovePathInvalidChars(string path, string replaceString = "")

@@ -11,6 +11,7 @@ namespace _1CSimpleUpdater
     {
         public string Name;
         public string Version;
+        public string MinPlatformVersion;
         public string[] FromVersions;
         public string UpdateFilePath;
     }
@@ -53,6 +54,15 @@ namespace _1CSimpleUpdater
                                 .Select(s => s[1].Split(';')).ToArray()[0]
                                     .Where(w => !String.IsNullOrWhiteSpace(w)).ToArray<string>();
                     confUpdateInfo.UpdateFilePath = Path.Combine(dirInfo.FullName, "1cv8.cfu");
+
+                    confUpdateInfo.MinPlatformVersion = "";
+                    if (File.Exists(Path.Combine(dirInfo.FullName, "1cv8upd.htm"))) {
+                        string updhtmContent = File.ReadAllText(Path.Combine(dirInfo.FullName, "1cv8upd.htm"));
+                        string pattern = @"Текущая версия конфигурации.*для использования с версией системы.*не ниже\s*(\d*\.\d*\.\d*\.\d*)";
+                        System.Text.RegularExpressions.Match match = System.Text.RegularExpressions.Regex.Match(updhtmContent, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        if (match.Captures.Count == 1 && match.Groups.Count == 2)
+                            confUpdateInfo.MinPlatformVersion = match.Groups[1].Value;
+                    } 
 
                     if (!ConfUpdates.Keys.Contains(confUpdateInfo.Name))
                         ConfUpdates[confUpdateInfo.Name] = new SortedList<long, ConfUpdateInfo>();
@@ -99,6 +109,11 @@ namespace _1CSimpleUpdater
                 return null;
 
             confUpdate = query.ToArray()[0];
+            if (!String.IsNullOrWhiteSpace(confUpdate.MinPlatformVersion) && Common.GetVersionAsLong(confUpdate.MinPlatformVersion) > Common.GetVersionAsLong(baseInfo.PlatformInfo.PlatformVersion))
+            {
+                Common.Log($"Обновление на релиз {confUpdate.Version} и выше невозможно, т.к. текущая версия платформы {baseInfo.PlatformInfo.PlatformVersion} ниже необходимой {confUpdate.MinPlatformVersion}!", ConsoleColor.DarkRed);
+                return result;
+            }
             result.Add(Common.GetVersionAsLong(confUpdate.Version), confUpdate);
 
             while (true)
@@ -112,6 +127,11 @@ namespace _1CSimpleUpdater
                     break;
 
                 confUpdate = query.Last<ConfUpdateInfo>();
+                if (!String.IsNullOrWhiteSpace(confUpdate.MinPlatformVersion) && Common.GetVersionAsLong(confUpdate.MinPlatformVersion) > Common.GetVersionAsLong(baseInfo.PlatformInfo.PlatformVersion))
+                {
+                    Common.Log($"Обновление на релиз {confUpdate.Version} и выше невозможно, т.к. текущая версия платформы {baseInfo.PlatformInfo.PlatformVersion} ниже необходимой {confUpdate.MinPlatformVersion}!", ConsoleColor.DarkRed);
+                    break;
+                }
                 result.Add(Common.GetVersionAsLong(confUpdate.Version), confUpdate);
             }
 

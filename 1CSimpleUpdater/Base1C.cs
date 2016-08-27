@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace _1CSimpleUpdater
@@ -33,20 +34,16 @@ namespace _1CSimpleUpdater
                     throw new Exception($"Для платформы {platformInfo.PlatformVersion} не найден ComConnector!");
                 Platform1C.CheckComConnectorInprocServerVersion(platformInfo, baseSettings);
 
-                AppDomain domainComConnection = AppDomain.CreateDomain("COM connection to 1C");
-                dynamic proxyOfComConneciontDomainObject = domainComConnection.CreateInstanceAndUnwrap("ComConnection1C", "ComConnection1C.ComConnection1C");
-                Base1CInfo baseInfo = proxyOfComConneciontDomainObject.GetBase1CInfo(baseSettings, platformInfo.ComConnectorVersion);
-                AppDomain.Unload(domainComConnection);
-
-                baseInfo.PlatformInfo = platformInfo;
+                Base1CInfo baseInfo = Common.CallFunctionAtComConnection1CDomain("GetBase1CInfo", baseSettings, platformInfo.ComConnectorVersion);
+                if (baseInfo != null)
+                    baseInfo.PlatformInfo = platformInfo;
 
                 return baseInfo;
             } catch (Exception e)
             {
                 Common.LogException(e);
+                return null;
             }
-            
-            return null;
         }
 
         public static bool CheckBaseUpdateNecessity(Base1CInfo baseInfo)
@@ -75,11 +72,11 @@ namespace _1CSimpleUpdater
         {
             if (baseSettings.IsServerIB)
             {
-                //throw new NotImplementedException();
-                return true;
+                if (Common.CallFunctionAtComConnection1CDomain("CheckServerBaseLockPossibilityAndLock", baseSettings, baseInfo.PlatformInfo.ComConnectorVersion))
+                    baseInfo.SessionsCount = 0;
             }
 
-            if (baseInfo.SessionsCount > 0)
+            if (baseInfo.SessionsCount != 0)
             {
                 Common.Log($"Невозможно получить монопольный доступ к базе, завершите работу пользователей и повторите попытку!", ConsoleColor.Red);
                 return false;
@@ -121,7 +118,7 @@ namespace _1CSimpleUpdater
             {
                 if (baseSettings.IsServerIB)
                 {
-                    //throw new NotImplementedException();
+                    Common.CallFunctionAtComConnection1CDomain("UnlockServerBase", baseSettings, baseInfo.PlatformInfo.ComConnectorVersion);
                 }
                 else
                 {
@@ -197,11 +194,7 @@ namespace _1CSimpleUpdater
         {
             Common.Log("Попытка обновления ИБ в пользовательском режиме...");
 
-            AppDomain domainComConnection = AppDomain.CreateDomain("COM connection to 1C");
-            dynamic proxyOfComConneciontDomainObject = domainComConnection.CreateInstanceAndUnwrap("ComConnection1C", "ComConnection1C.ComConnection1C");
-            Exception result = proxyOfComConneciontDomainObject.UpdateBaseInUserMode(baseSettings, baseInfo.PlatformInfo.ComConnectorVersion);
-            AppDomain.Unload(domainComConnection);
-
+            Exception result = Common.CallFunctionAtComConnection1CDomain("UpdateBaseInUserMode", baseSettings, baseInfo.PlatformInfo.ComConnectorVersion);
             if (result != null)
                 throw result;
         }
@@ -209,7 +202,7 @@ namespace _1CSimpleUpdater
         public static void UpdateBase(Base1CSettings baseSettings)
         {
             Common.Log($"\n////////////////////////////////////////////////////////////////////////////////", ConsoleColor.Yellow);
-            Common.Log($"// ОБНОВЛЕНИЕ БАЗЫ: {baseSettings.Description}", ConsoleColor.Yellow);
+            Common.Log($"// ОБНОВЛЕНИЕ ИБ: {baseSettings.Description}", ConsoleColor.Yellow);
 
             Base1CInfo baseInfo = Base1C.GetBase1CInfo(baseSettings);
             if (baseInfo == null)
@@ -229,9 +222,18 @@ namespace _1CSimpleUpdater
 
                 bool lastUpdateResult = false;
                 foreach (var confUpdateInfo in baseInfo.UpdatesSequence)
+                {
                     lastUpdateResult = UpdateBaseToNextRelease(baseSettings, baseInfo, confUpdateInfo.Value);
-
-                if (lastUpdateResult)
+                    if (baseSettings.RunUserModeAfterEveryUpdate)
+                    {
+                        if (lastUpdateResult)
+                            UpdateBaseInUserMode(baseSettings, baseInfo);
+                        else
+                            throw new Exception("Невозможно запустить обновление ИБ в пользовательском режиме из-за предыдущих ошибок!");
+                    }
+                }
+                    
+                if (lastUpdateResult && !baseSettings.RunUserModeAfterEveryUpdate)
                     UpdateBaseInUserMode(baseSettings, baseInfo);
 
                 Common.Log("Обновление успешно завершено!", ConsoleColor.Green);

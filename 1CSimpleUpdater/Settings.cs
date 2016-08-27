@@ -15,9 +15,13 @@ namespace _1CSimpleUpdater
         public string Description;
         public string IBConnectionString;
         public string PlatformVersion;
+        public string ClusterAdministratorLogin;
+        public string ClusterAdministratorPassword;
         public string Login;
         public string Password;
         public int BackupsCount;
+        public bool RunUserModeAfterEveryUpdate;
+        public bool EnableScheduledJobs;
 
         [XmlIgnore]
         public bool IsServerIB;
@@ -109,9 +113,13 @@ namespace _1CSimpleUpdater
                 Description = "Название (Типовая бухгалтерия)",
                 IBConnectionString = @"Строка подключения (File=""D:\WORK\_Типовые_\_Типовая_БП2_"";, Srvr=""localhost"";Ref=""Accounting"";)",
                 PlatformVersion = "Версия платформы (пусто = последняя, 8.2 = последняя из 8.2, 8.2.19.63 = конкретный релиз)",
+                ClusterAdministratorLogin = "Логин администратора кластера (для серверных ИБ)",
+                ClusterAdministratorPassword = "Пароль администратора кластера (для серверных ИБ)",
                 Login = "Логин",
                 Password = "Пароль",
-                BackupsCount = 2
+                BackupsCount = 2,
+                RunUserModeAfterEveryUpdate = false,
+                EnableScheduledJobs = true
             });
 
             using (XmlWriter xmlWriter = XmlWriter.Create(settingsFilePath, xmlWriterSettings))
