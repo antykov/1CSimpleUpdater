@@ -34,9 +34,6 @@ namespace _1CSimpleUpdater
 
             foreach (var base1C in AppSettings.settings.Bases1C)
                 Base1C.UpdateBase(base1C);
-
-            Common.Log("\nPress any key...");
-            Console.ReadKey();
         }
     }
 }

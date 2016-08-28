@@ -201,7 +201,8 @@ namespace _1CSimpleUpdater
 
         public static void UpdateBase(Base1CSettings baseSettings)
         {
-            Common.Log($"\n////////////////////////////////////////////////////////////////////////////////", ConsoleColor.Yellow);
+            Common.Log("\n", ConsoleColor.White, false, 0, false);
+            Common.Log($"////////////////////////////////////////////////////////////////////////////////", ConsoleColor.Yellow);
             Common.Log($"// ОБНОВЛЕНИЕ ИБ: {baseSettings.Description}", ConsoleColor.Yellow);
 
             Base1CInfo baseInfo = Base1C.GetBase1CInfo(baseSettings);

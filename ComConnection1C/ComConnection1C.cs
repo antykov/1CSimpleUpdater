@@ -1,6 +1,7 @@
 ﻿using _1CSimpleUpdater;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Runtime.Remoting.Lifetime;
@@ -277,8 +278,11 @@ namespace ComConnection1C
             }
         }
 
-        public void Log(string message, ConsoleColor color = ConsoleColor.White, bool newLine = true, int emptyLineLength = 0)
+        public void Log(string message, ConsoleColor color = ConsoleColor.White, bool newLine = true, int emptyLineLength = 0, bool logToFile = true)
         {
+            if (logToFile)
+                File.AppendAllText(AppSettings.settings.LogFileName, $"{DateTime.Now.ToString()} {message}\n");
+
             Console.ForegroundColor = color;
             if (emptyLineLength > 0)
                 Console.Write($"\r{new String(' ', emptyLineLength)}");
@@ -294,13 +298,22 @@ namespace ComConnection1C
         {
             Console.ForegroundColor = ConsoleColor.Red;
             if (info.Trim().Length == 0)
+            {
                 Console.WriteLine(E.Message);
+                File.AppendAllText(AppSettings.settings.LogFileName, $"{DateTime.Now.ToString()} [ERROR] {E.Message}\n");
+            }
             else
+            {
                 Console.WriteLine($"{info}: {E.Message}");
+                File.AppendAllText(AppSettings.settings.LogFileName, $"{DateTime.Now.ToString()} [ERROR] {info}: {E.Message}\n");
+            }
+                
             Exception inner = E.InnerException;
             while (inner != null)
             {
                 Console.WriteLine($"    --> {inner.Message}");
+                File.AppendAllText(AppSettings.settings.LogFileName, $"{DateTime.Now.ToString()} [ERROR]    --> {inner.Message}\n");
+
                 inner = inner.InnerException;
             }
         }

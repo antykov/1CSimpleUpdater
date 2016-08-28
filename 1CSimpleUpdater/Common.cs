@@ -102,23 +102,11 @@ namespace _1CSimpleUpdater
             }
         }
 
-        public static void LogException(Exception E, string info = "")
+        public static void Log(string message, ConsoleColor color = ConsoleColor.White, bool newLine = true, int emptyLineLength = 0, bool logToFile = true)
         {
-            Console.ForegroundColor = ConsoleColor.Red;
-            if (info.Trim().Length == 0)
-                Console.WriteLine(E.Message);
-            else
-                Console.WriteLine($"{info}: {E.Message}");
-            Exception inner = E.InnerException;
-            while (inner != null)
-            {
-                Console.WriteLine($"    --> {inner.Message}");
-                inner = inner.InnerException;
-            }
-        }
+            if (logToFile)
+                File.AppendAllText(AppSettings.settings.LogFileName, $"{DateTime.Now.ToString()} {message}\n");
 
-        public static void Log(string message, ConsoleColor color = ConsoleColor.White, bool newLine = true, int emptyLineLength = 0)
-        {
             Console.ForegroundColor = color;
             if (emptyLineLength > 0)
                 Console.Write($"\r{new String(' ', emptyLineLength)}");
@@ -128,6 +116,30 @@ namespace _1CSimpleUpdater
                 Console.Write($"\r{message}");
             if (emptyLineLength > 0)
                 Console.Write($"\r");
+        }
+
+        public static void LogException(Exception E, string info = "")
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            if (info.Trim().Length == 0)
+            {
+                Console.WriteLine(E.Message);
+                File.AppendAllText(AppSettings.settings.LogFileName, $"{DateTime.Now.ToString()} [ERROR] {E.Message}\n");
+            }
+            else
+            {
+                Console.WriteLine($"{info}: {E.Message}");
+                File.AppendAllText(AppSettings.settings.LogFileName, $"{DateTime.Now.ToString()} [ERROR] {info}: {E.Message}\n");
+            }
+
+            Exception inner = E.InnerException;
+            while (inner != null)
+            {
+                Console.WriteLine($"    --> {inner.Message}");
+                File.AppendAllText(AppSettings.settings.LogFileName, $"{DateTime.Now.ToString()} [ERROR]    --> {inner.Message}\n");
+
+                inner = inner.InnerException;
+            }
         }
     }
 }

@@ -35,12 +35,19 @@ namespace _1CSimpleUpdater
         public string BackupsDirectory;
         [XmlElement]
         public string TemplatesDirectory;
+        [XmlElement]
+        public bool OverwriteLogFile;
         [XmlArray("Bases1C"), XmlArrayItem("Base1C")]
         public List<Base1CSettings> Bases1C;
+
+        [XmlIgnore]
+        public string LogFileName;
 
         public Settings()
         {
             Bases1C = new List<Base1CSettings>();
+
+            LogFileName = Path.Combine(Environment.CurrentDirectory, "1CSimpleUpdater.log");
         }
     }
 
@@ -62,6 +69,9 @@ namespace _1CSimpleUpdater
             {
                 settings = (Settings)xmlSerializer.Deserialize(xmlStream);
             }
+
+            if (settings.OverwriteLogFile)
+                File.Delete(settings.LogFileName);
 
             foreach (var base1C in settings.Bases1C)
             {
@@ -106,7 +116,8 @@ namespace _1CSimpleUpdater
             Settings templateSettings = new Settings
             {
                 BackupsDirectory = "Каталог для резервных копий (необязательно)",
-                TemplatesDirectory = @"Каталог с шаблонами обновлений (...\tmplts)"
+                TemplatesDirectory = @"Каталог с шаблонами обновлений (...\tmplts)",
+                OverwriteLogFile = true
             };
             templateSettings.Bases1C.Add(new Base1CSettings
             {
